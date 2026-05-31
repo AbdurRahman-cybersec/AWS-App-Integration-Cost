@@ -1,0 +1,942 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AWS App Integration & Cost — 11 Services, No Fluff</title>
+<style>
+/* ============================================================
+   Design System
+   ============================================================ */
+:root {
+  --bg: #0F0F1A;
+  --surface: #1A1A2E;
+  --surface2: #22223A;
+  --text: #E8E8F0;
+  --muted: #9595B0;
+  --accent: #00D2A0;
+  --success: #4CAF50;
+  --danger: #EF5350;
+  --border: #2A2A42;
+  --radius: 16px;
+  --radius-sm: 10px;
+  --font: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --shadow: 0 4px 24px rgba(0,0,0,0.35);
+  --transition: 0.3s cubic-bezier(0.4,0,0.2,1);
+
+  --color-eventbridge: #FF6B9D;
+  --color-sns: #E57373;
+  --color-sqs: #BA68C8;
+  --color-stepfunctions: #4FC3F7;
+  --color-connect: #FFB74D;
+  --color-ses: #81C784;
+  --color-billingconductor: #A1887F;
+  --color-budgets: #4DB6AC;
+  --color-cur: #FFD54F;
+  --color-costexplorer: #64B5F6;
+  --color-marketplace: #90A4AE;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; scroll-padding-top: 70px; }
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--surface2); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+#progressWrap { position: fixed; top: 0; left: 0; width: 100%; height: 4px; z-index: 1100; background: var(--surface); }
+#progressFill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent), #00FFC8); transition: width 0.5s cubic-bezier(0.4,0,0.2,1); box-shadow: 0 0 14px rgba(0,210,160,0.4); }
+
+#stickyNav {
+  position: sticky; top: 0; z-index: 1050;
+  background: rgba(15,15,26,0.78); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--border); padding: 0 1rem; overflow-x: auto;
+  display: flex; align-items: center; gap: 0; white-space: nowrap;
+}
+#stickyNav a {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 12px 14px; font-size: 0.82rem; font-weight: 600;
+  color: var(--muted); text-decoration: none;
+  border-bottom: 2px solid transparent; transition: color var(--transition), border-color var(--transition); flex-shrink: 0;
+}
+#stickyNav a:hover, #stickyNav a:focus { color: var(--text); }
+#stickyNav a.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+.section { max-width: 1150px; margin: 0 auto; padding: 5rem 1.5rem; }
+.section-header { text-align: center; margin-bottom: 3.5rem; }
+.section-header h2 { font-size: clamp(1.7rem, 3.5vw, 2.4rem); font-weight: 700; margin-bottom: 0.5rem; color: var(--text); }
+.section-header p { color: var(--muted); font-size: 1.05rem; }
+
+/* Hero */
+.hero {
+  min-height: 92vh; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; text-align: center;
+  padding: 2rem 1.5rem; position: relative;
+}
+.hero::before {
+  content: ''; position: absolute; top: 50%; left: 50%;
+  width: 550px; height: 550px; transform: translate(-50%,-50%);
+  background: radial-gradient(circle, rgba(0,210,160,0.12) 0%, transparent 70%);
+  pointer-events: none; animation: heroPulse 5s ease-in-out infinite;
+}
+@keyframes heroPulse { 0%,100%{opacity:0.5;transform:translate(-50%,-50%) scale(1);} 50%{opacity:0.85;transform:translate(-50%,-50%) scale(1.12);} }
+.hero-content { position: relative; z-index: 1; }
+.hero h1 {
+  font-size: clamp(2rem, 5vw, 3.6rem); font-weight: 700; line-height: 1.15; margin-bottom: 1rem;
+  background: linear-gradient(135deg, var(--text) 0%, var(--accent) 50%, var(--text) 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-size: 200% 100%; animation: shimmer 4s ease-in-out infinite;
+}
+@keyframes shimmer { 0%,100%{background-position:0% center;} 50%{background-position:200% center;} }
+.hero-subtitle { font-size: clamp(0.95rem, 2vw, 1.25rem); color: var(--muted); min-height: 2em; display: flex; align-items: center; justify-content: center; gap: 2px; }
+.hero-subtitle .cursor { display: inline-block; width: 2px; height: 1.2em; background: var(--accent); animation: blink 0.8s step-end infinite; }
+@keyframes blink { 0%,100%{opacity:1;} 50%{opacity:0;} }
+.legend-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 2.2rem; position: relative; z-index: 1; }
+.legend-chip { display: flex; align-items: center; gap: 5px; padding: 5px 14px; border-radius: 20px; font-size: 0.72rem; font-weight: 600; background: var(--surface); border: 1px solid var(--border); color: var(--muted); white-space: nowrap; }
+.legend-chip .dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.hero-cta { margin-top: 2rem; display: inline-flex; align-items: center; gap: 8px; padding: 12px 32px; border-radius: 50px; z-index: 1; position: relative; border: 1.5px solid var(--accent); background: transparent; color: var(--accent); font-size: 0.9rem; font-weight: 600; cursor: pointer; text-decoration: none; transition: all var(--transition); }
+.hero-cta:hover { background: var(--accent); color: var(--bg); box-shadow: 0 0 28px rgba(0,210,160,0.35); }
+
+/* Decision Tree */
+.tree-root { text-align: center; margin-bottom: 2rem; font-size: 1.2rem; font-weight: 700; color: var(--text); }
+.tree-branches { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
+.tree-branch {
+  background: var(--surface); border-radius: var(--radius-sm);
+  border-left: 4px solid transparent; padding: 0.9rem 1.2rem;
+  cursor: pointer; transition: all var(--transition); text-align: left;
+  font-size: 0.92rem; font-weight: 500; color: var(--text);
+}
+.tree-branch:hover { background: var(--surface2); border-left-width: 5px; padding-left: 1.35rem; }
+.tree-answer { display: none; padding: 1rem 1.2rem; margin-top: 6px; background: var(--surface2); border-radius: var(--radius-sm); border-left: 4px solid var(--accent); font-size: 0.9rem; line-height: 1.55; animation: fadeSlide 0.35s ease; }
+.tree-answer.show { display: block; }
+.tree-answer .ans-service { font-weight: 700; }
+@keyframes fadeSlide { from{opacity:0;transform:translateY(-8px);} to{opacity:1;transform:translateY(0);} }
+
+/* Service Cards */
+.cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1.5rem; }
+.svc-card {
+  background: var(--surface); border-radius: var(--radius);
+  padding: 1.75rem; border: 1px solid var(--border);
+  transition: all var(--transition); opacity: 0; transform: translateY(36px);
+}
+.svc-card.visible { opacity: 1; transform: translateY(0); }
+.svc-card:hover { background: var(--surface2); box-shadow: var(--shadow); }
+.svc-card .accent-bar { height: 4px; border-radius: 2px; margin-bottom: 1rem; }
+.svc-card .card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 0.6rem; }
+.svc-card .card-head .emoji { font-size: 1.6rem; }
+.svc-card .card-head .name { font-size: 1.1rem; font-weight: 700; }
+.svc-card .tags-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 0.9rem; }
+.svc-card .tag { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; padding: 3px 10px; border-radius: 14px; }
+.tag-event { background: rgba(255,107,157,0.12); color: #FF6B9D; }
+.tag-messaging { background: rgba(186,104,200,0.12); color: #BA68C8; }
+.tag-workflow { background: rgba(79,195,247,0.12); color: #4FC3F7; }
+.tag-business { background: rgba(255,183,77,0.12); color: #FFB74D; }
+.tag-email { background: rgba(129,199,132,0.12); color: #81C784; }
+.tag-cost { background: rgba(0,210,160,0.12); color: #00D2A0; }
+
+.svc-card .card-def {
+  font-size: 0.88rem; color: var(--text); line-height: 1.55;
+  margin-bottom: 0.75rem; padding: 0.6rem 0.9rem;
+  background: rgba(255,255,255,0.03); border-radius: var(--radius-sm);
+  border-left: 3px solid var(--accent);
+}
+.svc-card .exam-trigger { font-size: 0.78rem; color: var(--accent); margin-bottom: 0.5rem; font-weight: 600; }
+.svc-card .use-block, .svc-card .dont-block {
+  font-size: 0.82rem; padding: 0.6rem 0.9rem; border-radius: var(--radius-sm);
+  margin-bottom: 0.4rem; line-height: 1.45;
+}
+.svc-card .use-block { background: rgba(76,175,80,0.08); border-left: 3px solid var(--success); }
+.svc-card .use-block strong { color: var(--success); }
+.svc-card .dont-block { background: rgba(239,83,80,0.06); border-left: 3px solid var(--danger); }
+.svc-card .dont-block strong { color: var(--danger); }
+
+/* Key Concepts */
+.concept-cards { display: flex; flex-direction: column; gap: 2rem; }
+.concept-card { background: var(--surface); border-radius: var(--radius); padding: 1.75rem; border: 1px solid var(--border); }
+.concept-card h3 { font-size: 1.15rem; margin-bottom: 0.3rem; color: var(--accent); }
+.concept-card .concept-def { font-size: 0.88rem; color: var(--muted); line-height: 1.55; margin-bottom: 1.1rem; padding: 0.55rem 0.85rem; background: rgba(255,255,255,0.03); border-radius: var(--radius-sm); border-left: 3px solid var(--accent); }
+.concept-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+.concept-table th { text-align: left; padding: 10px 14px; background: var(--surface2); color: var(--muted); font-weight: 700; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid var(--border); }
+.concept-table td { padding: 10px 14px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: top; }
+.concept-table tr:last-child td { border-bottom: none; }
+.concept-table .hl { color: var(--accent); font-weight: 700; }
+
+/* Comparison Table */
+.compare-scroll { overflow-x: auto; border-radius: var(--radius); border: 1px solid var(--border); }
+#compareTable { width: 100%; min-width: 800px; border-collapse: collapse; font-size: 0.85rem; }
+#compareTable th { text-align: left; padding: 12px 14px; background: var(--surface2); color: var(--muted); font-weight: 700; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid var(--border); white-space: nowrap; }
+#compareTable td { padding: 14px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: top; }
+#compareTable tbody tr:hover { background: var(--surface2); }
+#compareTable .cat-chip { display: inline-block; padding: 3px 12px; border-radius: 14px; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; }
+.cat-event { background: rgba(255,107,157,0.15); color: #FF6B9D; }
+.cat-msg { background: rgba(186,104,200,0.15); color: #BA68C8; }
+.cat-wf { background: rgba(79,195,247,0.15); color: #4FC3F7; }
+.cat-biz { background: rgba(255,183,77,0.15); color: #FFB74D; }
+.cat-email { background: rgba(129,199,132,0.15); color: #81C784; }
+.cat-cost { background: rgba(0,210,160,0.15); color: #00D2A0; }
+
+/* Flashcards */
+.flash-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1.2rem; perspective: 1200px; }
+.flash-card { height: 180px; cursor: pointer; position: relative; transform-style: preserve-3d; transition: transform 0.6s cubic-bezier(0.4,0,0.2,1); }
+.flash-card.flipped { transform: rotateY(180deg); }
+.flash-face { position: absolute; inset: 0; backface-visibility: hidden; border-radius: var(--radius-sm); border: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 1.2rem; text-align: center; }
+.flash-front { background: var(--surface); }
+.flash-front .prompt { font-size: 0.92rem; font-weight: 600; color: var(--text); }
+.flash-front .hint { font-size: 0.68rem; color: var(--muted); margin-top: 0.5rem; }
+.flash-back { background: var(--surface2); transform: rotateY(180deg); }
+.flash-back .answer { font-size: 1rem; font-weight: 700; margin-bottom: 0.3rem; }
+.flash-back .detail { font-size: 0.78rem; color: var(--muted); }
+
+/* Scenarios */
+.scenario-grid { display: flex; flex-direction: column; gap: 1rem; }
+.scenario-card { background: var(--surface); border-radius: var(--radius-sm); padding: 1.25rem 1.5rem; border: 2px solid var(--border); transition: all var(--transition); }
+.scenario-card.correct { border-color: var(--success); box-shadow: 0 0 18px rgba(76,175,80,0.18); }
+.scenario-card.wrong { border-color: var(--danger); box-shadow: 0 0 18px rgba(239,83,80,0.18); }
+.scenario-card .sc-text { font-size: 0.95rem; margin-bottom: 0.75rem; font-weight: 500; }
+.scenario-card .sc-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.scenario-card select { padding: 8px 12px; border-radius: var(--radius-sm); background: var(--surface2); color: var(--text); border: 1px solid var(--border); font-family: var(--font); font-size: 0.85rem; min-width: 220px; cursor: pointer; }
+.scenario-card select:focus { outline: none; border-color: var(--accent); }
+.scenario-card .check-btn { padding: 8px 20px; border-radius: var(--radius-sm); font-weight: 600; font-size: 0.82rem; cursor: pointer; background: transparent; border: 1.5px solid var(--accent); color: var(--accent); transition: all var(--transition); }
+.scenario-card .check-btn:hover { background: var(--accent); color: var(--bg); }
+.scenario-card .sc-feedback { margin-top: 0.6rem; font-size: 0.85rem; display: none; }
+.scenario-card .sc-feedback.show { display: block; }
+.scenario-card .sc-feedback.correct-fb { color: #81C784; }
+.scenario-card .sc-feedback.wrong-fb { color: #EF9A9A; }
+.scenario-score { text-align: center; font-size: 1.1rem; font-weight: 700; margin-bottom: 1.5rem; color: var(--accent); }
+
+/* Quiz */
+.quiz-wrap { max-width: 720px; margin: 0 auto; }
+.quiz-progress-text { text-align: center; color: var(--muted); font-size: 0.82rem; font-weight: 600; margin-bottom: 1.5rem; }
+.quiz-card { background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--radius); padding: 2rem; margin-bottom: 1rem; transition: all var(--transition); }
+.quiz-card.correct { border-color: var(--success); box-shadow: 0 0 20px rgba(76,175,80,0.15); }
+.quiz-card.incorrect { border-color: var(--danger); box-shadow: 0 0 20px rgba(239,83,80,0.15); }
+.quiz-q-num { font-size: 0.72rem; color: var(--muted); margin-bottom: 0.4rem; text-transform: uppercase; letter-spacing: 0.6px; font-weight: 700; }
+.quiz-question { font-size: 1.08rem; font-weight: 600; margin-bottom: 1.2rem; line-height: 1.45; }
+.quiz-options { display: flex; flex-direction: column; gap: 8px; }
+.quiz-option { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--surface2); color: var(--text); cursor: pointer; font-family: var(--font); font-size: 0.92rem; text-align: left; transition: all var(--transition); }
+.quiz-option:hover:not(.disabled) { border-color: var(--accent); background: rgba(0,210,160,0.05); }
+.quiz-option.correct-choice { border-color: var(--success); background: rgba(76,175,80,0.12); color: var(--success); }
+.quiz-option.wrong-choice { border-color: var(--danger); background: rgba(239,83,80,0.08); color: var(--danger); }
+.quiz-option.disabled { pointer-events: none; opacity: 0.7; }
+.quiz-option .opt-badge { width: 28px; height: 28px; border-radius: 50%; background: var(--surface); display: flex; align-items: center; justify-content: center; font-size: 0.78rem; font-weight: 700; flex-shrink: 0; border: 1px solid var(--border); }
+.quiz-option.correct-choice .opt-badge { background: var(--success); color: #fff; border-color: var(--success); }
+.quiz-option.wrong-choice .opt-badge { background: var(--danger); color: #fff; border-color: var(--danger); }
+.quiz-feedback { margin-top: 1rem; padding: 1rem; border-radius: var(--radius-sm); font-size: 0.88rem; line-height: 1.5; display: none; }
+.quiz-feedback.show { display: block; animation: fadeSlide 0.3s ease; }
+.quiz-feedback.correct-fb { background: rgba(76,175,80,0.1); border: 1px solid rgba(76,175,80,0.25); color: #A5D6A7; }
+.quiz-feedback.incorrect-fb { background: rgba(239,83,80,0.08); border: 1px solid rgba(239,83,80,0.2); color: #EF9A9A; }
+.quiz-next { margin-top: 1rem; display: none; padding: 10px 24px; border-radius: var(--radius-sm); border: 1.5px solid var(--accent); background: transparent; color: var(--accent); font-size: 0.82rem; font-weight: 600; cursor: pointer; font-family: var(--font); transition: all var(--transition); }
+.quiz-next.show { display: inline-flex; align-items: center; gap: 6px; }
+.quiz-next:hover { background: var(--accent); color: var(--bg); }
+
+.score-card { text-align: center; padding: 3rem 2rem; background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border); display: none; }
+.score-card.show { display: block; animation: popIn 0.5s cubic-bezier(0.175,0.885,0.32,1.275); }
+@keyframes popIn { from{opacity:0;transform:scale(0.85);} to{opacity:1;transform:scale(1);} }
+.score-number { font-size: 3.5rem; font-weight: 800; margin-bottom: 0.3rem; }
+.score-grade { font-size: 1.4rem; font-weight: 700; margin-bottom: 0.5rem; }
+.score-msg { color: var(--muted); max-width: 420px; margin: 0 auto 1.5rem; font-size: 0.95rem; }
+.score-retry { padding: 11px 30px; border-radius: 50px; border: 2px solid var(--accent); background: transparent; color: var(--accent); font-size: 0.88rem; font-weight: 600; cursor: pointer; font-family: var(--font); transition: all var(--transition); }
+.score-retry:hover { background: var(--accent); color: var(--bg); }
+
+/* Confetti */
+.confetti-container { position:fixed; inset:0; pointer-events:none; z-index:2000; }
+.confetti-piece { position:absolute; width:10px; height:10px; opacity:0; animation: confettiFall var(--d,2.5s) var(--delay,0s) ease-out forwards; }
+@keyframes confettiFall { 0%{opacity:1;transform:translate(0,0) rotate(0deg) scale(1);} 100%{opacity:0;transform:translate(var(--dx),var(--dy)) rotate(var(--sp)) scale(0.25);} }
+
+/* Cheat Sheet */
+.cheatsheet-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+.cheat-item { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: var(--surface); border-radius: var(--radius-sm); border-left: 3px solid transparent; transition: all var(--transition); }
+.cheat-item:hover { border-left-color: var(--accent); transform: translateX(4px); background: var(--surface2); }
+.cheat-item .ch-emoji { font-size: 1.5rem; flex-shrink: 0; }
+.cheat-item .ch-desc { flex:1; font-size: 0.85rem; color: var(--text); }
+.cheat-item .ch-service { font-size: 0.72rem; font-weight: 700; color: var(--muted); flex-shrink: 0; }
+
+/* Footer */
+.footer { border-top: 1px solid var(--border); text-align: center; padding: 2rem; color: var(--muted); font-size: 0.82rem; }
+
+/* Responsive */
+@media (max-width: 768px) {
+  .section { padding: 3rem 1rem; }
+  .hero h1 { font-size: clamp(1.5rem, 7vw, 2.4rem); }
+  .cards-grid { grid-template-columns: 1fr; }
+  .flash-grid { grid-template-columns: 1fr 1fr; }
+  .cheatsheet-grid { grid-template-columns: 1fr; }
+  .tree-branches { grid-template-columns: 1fr; }
+  #stickyNav a { padding: 10px 11px; font-size: 0.75rem; }
+}
+@media (max-width: 480px) {
+  .flash-grid { grid-template-columns: 1fr; }
+  .hero { min-height: 85vh; }
+  #stickyNav { gap: 0; }
+  #stickyNav a { padding: 9px 8px; font-size: 0.7rem; }
+  .quiz-card { padding: 1.25rem; }
+}
+</style>
+</head>
+<body>
+
+<div id="progressWrap"><div id="progressFill"></div></div>
+
+<nav id="stickyNav">
+  <a href="#hero" class="active">&#127968; Home</a>
+  <a href="#tree">&#127795; Decision Tree</a>
+  <a href="#cards">&#127199; Service Cards</a>
+  <a href="#concepts">&#128214; Concepts</a>
+  <a href="#compare">&#128202; Compare</a>
+  <a href="#memory">&#129504; Memory</a>
+  <a href="#scenarios">&#127919; Scenarios</a>
+  <a href="#quiz">&#128221; Quiz</a>
+  <a href="#cheatsheet">&#128203; Cheat Sheet</a>
+</nav>
+
+<!-- Hero -->
+<section class="hero" id="hero">
+  <div class="hero-content">
+    <h1>AWS App Integration<br>& Cost — Explained<br>Without the Boring Parts</h1>
+    <div class="hero-subtitle"><span id="typedText"></span><span class="cursor">|</span></div>
+    <div class="legend-row" id="legendRow"></div>
+    <a href="#tree" class="hero-cta">Start Learning &#8595;</a>
+  </div>
+</section>
+
+<!-- Decision Tree -->
+<section class="section" id="tree">
+  <div class="section-header">
+    <h2>&#127795; Decision Tree</h2>
+    <p>Start here — pick what you're trying to do and we'll tell you which service fits</p>
+  </div>
+  <div class="tree-root">&#128225; What are you trying to do?</div>
+  <div class="tree-branches" id="treeBranches"></div>
+</section>
+
+<!-- Service Cards -->
+<section class="section" id="cards">
+  <div class="section-header">
+    <h2>&#127199; Service Cards</h2>
+    <p>All 11 services, with exam trigger words and when to use (or not)</p>
+  </div>
+  <div class="cards-grid" id="cardsGrid"></div>
+</section>
+
+<!-- Key Concepts -->
+<section class="section" id="concepts">
+  <div class="section-header">
+    <h2>&#128214; Key Concepts</h2>
+    <p>Three mental models for app integration and cost management</p>
+  </div>
+  <div class="concept-cards">
+    <div class="concept-card">
+      <h3>&#128172; Pub/Sub vs Point-to-Point Messaging</h3>
+      <p class="concept-def">Pub/Sub = one message goes to many receivers. Point-to-point = one message goes to exactly one receiver.</p>
+      <table class="concept-table">
+        <thead><tr><th>Dimension</th><th>Pub/Sub (SNS, EventBridge)</th><th>Point-to-Point (SQS)</th></tr></thead>
+        <tbody>
+          <tr><td><strong>How it works</strong></td><td>One sender, many receivers get copies</td><td>One sender, one receiver processes it</td></tr>
+          <tr><td><strong>Use case</strong></td><td>Fan-out: notify email + SMS + Lambda at once</td><td>Decouple services with a queue buffer</td></tr>
+          <tr><td><strong>AWS services</strong></td><td class="hl">SNS, EventBridge</td><td class="hl">SQS</td></tr>
+          <tr><td><strong>Example</strong></td><td>New user signup → email + SMS + Slack</td><td>Order placed → one worker picks it up</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="concept-card">
+      <h3>&#128161; Event-Driven vs Workflow Orchestration</h3>
+      <p class="concept-def">Event-driven = each service reacts to events independently. Workflow = a defined sequence of steps with retries and branching.</p>
+      <table class="concept-table">
+        <thead><tr><th>Dimension</th><th>Event-Driven (EventBridge)</th><th>Workflow (Step Functions)</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Structure</strong></td><td>Loose coupling — events trigger reactions</td><td>State machine — each step is explicit</td></tr>
+          <tr><td><strong>Visibility</strong></td><td>Hard to trace end-to-end</td><td>Visual execution history, clear state</td></tr>
+          <tr><td><strong>Retries</strong></td><td>You build retry logic yourself</td><td>Built-in retries, timeouts, error branching</td></tr>
+          <tr><td><strong>Example</strong></td><td>File uploaded → trigger 3 independent lambdas</td><td>Order workflow: validate → charge → ship → notify</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="concept-card">
+      <h3>&#128176; Cost Visibility vs Cost Control</h3>
+      <p class="concept-def">Visibility = see where your money went. Control = set limits and get alerts before you overspend.</p>
+      <table class="concept-table">
+        <thead><tr><th>Dimension</th><th>Cost Visibility (CUR, Cost Explorer)</th><th>Cost Control (Budgets, Billing Conductor)</th></tr></thead>
+        <tbody>
+          <tr><td><strong>What it does</strong></td><td>Shows you what you spent and why</td><td>Sets limits and alerts before you overspend</td></tr>
+          <tr><td><strong>AWS services</strong></td><td class="hl">Cost Explorer, Cost & Usage Report</td><td class="hl">Budgets, Billing Conductor</td></tr>
+          <tr><td><strong>Granularity</strong></td><td>Hourly/daily, per-service, per-tag</td><td>Monthly/quarterly budget thresholds</td></tr>
+          <tr><td><strong>Example</strong></td><td>"EC2 costs spiked 30% this week — why?"</td><td>"Text me if spending hits $500 this month"</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- Comparison Table -->
+<section class="section" id="compare">
+  <div class="section-header">
+    <h2>&#128202; Master Comparison</h2>
+    <p>All 11 services side by side — scroll horizontally to see everything</p>
+  </div>
+  <div class="compare-scroll">
+    <table id="compareTable">
+      <thead><tr><th>Service</th><th>Type</th><th>Primary Use Case</th><th>Category</th></tr></thead>
+      <tbody id="compareBody"></tbody>
+    </table>
+  </div>
+</section>
+
+<!-- Flashcards -->
+<section class="section" id="memory">
+  <div class="section-header">
+    <h2>&#129504; Memory Flashcards</h2>
+    <p>Click to flip. Front = prompt, back = answer.</p>
+  </div>
+  <div class="flash-grid" id="flashGrid"></div>
+</section>
+
+<!-- Scenarios -->
+<section class="section" id="scenarios">
+  <div class="section-header">
+    <h2>&#127919; Scenario Practice</h2>
+    <p>Pick the right service for each scenario — instant feedback</p>
+  </div>
+  <div class="scenario-score" id="scenarioScore">Score: 0 / 10</div>
+  <div class="scenario-grid" id="scenarioGrid"></div>
+</section>
+
+<!-- Quiz -->
+<section class="section" id="quiz">
+  <div class="section-header">
+    <h2>&#128221; Quiz</h2>
+    <p>20 questions across all 11 services. Mix of recall, application, and gotchas.</p>
+  </div>
+  <div class="quiz-wrap">
+    <div class="quiz-progress-text" id="quizProgress">Question 1 of 20</div>
+    <div id="quizContainer"></div>
+    <div class="score-card" id="scoreCard">
+      <div class="score-number" id="scoreNumber">0/20</div>
+      <div class="score-grade" id="scoreGrade"></div>
+      <p class="score-msg" id="scoreMsg"></p>
+      <button class="score-retry" onclick="resetQuiz()">Try Again &#10227;</button>
+    </div>
+  </div>
+</section>
+
+<!-- Cheat Sheet -->
+<section class="section" id="cheatsheet">
+  <div class="section-header">
+    <h2>&#128203; Cheat Sheet</h2>
+    <p>Quick reference — emoji hints mapped to the right service</p>
+  </div>
+  <div class="cheatsheet-grid" id="cheatsheetGrid"></div>
+</section>
+
+<div class="confetti-container" id="confettiContainer"></div>
+
+<footer class="footer">
+  Built to be useful. AWS service names are trademarks of Amazon.
+</footer>
+
+<script>
+'use strict';
+
+const services = [
+  {
+    id: 'eventbridge', name: 'Amazon EventBridge', emoji: '🚌',
+    color: '#FF6B9D',
+    tags: [{ label: 'Event Bus', cls: 'tag-event' }],
+    catChip: { label: 'Event Bus', cls: 'cat-event' },
+    type: 'Serverless Event Bus',
+    definition: 'A central bus that routes events between your apps — one app sends an event, others react to it.',
+    useCase: 'Route events between AWS services and your own apps',
+    examKeywords: 'event bus, rules, event patterns, SaaS integration, cron scheduler, default/partner/custom bus',
+    examTrigger: '"Event-driven", "Decouple apps", "SaaS integration"',
+    useIt: 'Connecting SaaS apps to AWS. Building event-driven architectures. Replacing cron with scheduled rules. Decoupling microservices.',
+    dontIt: 'Simple publish-to-many fan-out (SNS is simpler). Message queuing with ordering (use SQS). Complex multi-step workflows (use Step Functions).',
+  },
+  {
+    id: 'sns', name: 'Amazon SNS', emoji: '📢',
+    color: '#E57373',
+    tags: [{ label: 'Messaging', cls: 'tag-messaging' }],
+    catChip: { label: 'Messaging', cls: 'cat-msg' },
+    type: 'Pub/Sub Messaging',
+    definition: 'Send one message to many receivers at once — think email, SMS, push notifications, or triggering Lambdas.',
+    useCase: 'Push messages to many subscribers at once',
+    examKeywords: 'topics, subscribers, fan-out, push notification, SMS, email, SQS fan-out, message filtering',
+    examTrigger: '"Fan-out", "Push notifications", "Pub/Sub"',
+    useIt: 'Sending notifications (email, SMS, push). Fanning out messages to multiple SQS queues. Mobile push notifications. System alerts.',
+    dontIt: 'Message queuing with guaranteed delivery (use SQS). Complex event routing rules (use EventBridge). Two-way communication (it\'s one-way push only).',
+  },
+  {
+    id: 'sqs', name: 'Amazon SQS', emoji: '📥',
+    color: '#BA68C8',
+    tags: [{ label: 'Messaging', cls: 'tag-messaging' }],
+    catChip: { label: 'Messaging', cls: 'cat-msg' },
+    type: 'Message Queuing',
+    definition: 'A queue that holds messages until a worker picks them up — decouples your apps so they don\'t have to talk directly.',
+    useCase: 'Buffer messages between services for reliable processing',
+    examKeywords: 'queue, decoupling, visibility timeout, dead-letter queue, FIFO, standard, at-least-once, long polling',
+    examTrigger: '"Decoupling", "Queue", "Dead-letter queue"',
+    useIt: 'Decoupling microservices. Smoothing traffic spikes with a buffer. Guaranteeing message delivery between services. FIFO queues for strict ordering.',
+    dontIt: 'Broadcasting to many receivers (use SNS). Real-time streaming (use Kinesis). Complex event routing (use EventBridge).',
+  },
+  {
+    id: 'stepfunctions', name: 'AWS Step Functions', emoji: '🔗',
+    color: '#4FC3F7',
+    tags: [{ label: 'Workflow', cls: 'tag-workflow' }],
+    catChip: { label: 'Workflow', cls: 'cat-wf' },
+    type: 'Workflow Orchestration',
+    definition: 'Chain multiple AWS services together into a visual workflow — with built-in retries, branching, and error handling.',
+    useCase: 'Orchestrate multi-step workflows with retries and branching',
+    examKeywords: 'state machine, workflow, retry, error handling, Express, Standard, visual execution, service integrations',
+    examTrigger: '"State machine", "Orchestration", "Retry logic"',
+    useIt: 'Multi-step order processing. Human approval workflows. Error handling with automatic retries. Visual tracking of long-running processes.',
+    dontIt: 'Simple single-task triggers (use Lambda + EventBridge). Real-time streaming pipelines (use Kinesis). Message fan-out (use SNS).',
+  },
+  {
+    id: 'connect', name: 'Amazon Connect', emoji: '📞',
+    color: '#FFB74D',
+    tags: [{ label: 'Business', cls: 'tag-business' }],
+    catChip: { label: 'Business App', cls: 'cat-biz' },
+    type: 'Cloud Contact Center',
+    definition: 'A contact center in the cloud — set up a phone support system with IVR menus, call routing, and agent dashboards.',
+    useCase: 'Build a cloud-based call center with IVR and routing',
+    examKeywords: 'contact center, IVR, call routing, agent desktop, omnichannel, queues, contact flows, telephony',
+    examTrigger: '"Contact center", "Call center", "IVR"',
+    useIt: 'Setting up a customer support phone line. Building IVR menus ("press 1 for..."). Agent-based call routing. Omnichannel support (voice + chat).',
+    dontIt: 'Sending bulk transactional emails (use SES). Internal team messaging (use Chime/Slack). Outbound marketing calls only (third-party tools exist).',
+  },
+  {
+    id: 'ses', name: 'Amazon SES', emoji: '✉️',
+    color: '#81C784',
+    tags: [{ label: 'Email', cls: 'tag-email' }],
+    catChip: { label: 'Email', cls: 'cat-email' },
+    type: 'Email Sending Service',
+    definition: 'Send emails from your app — transactional emails like receipts, password resets, or marketing campaigns.',
+    useCase: 'Send transactional and marketing emails at scale',
+    examKeywords: 'email, SMTP, sending, reputation, DKIM, SPF, bounce handling, complaint tracking, suppression list',
+    examTrigger: '"Send email", "Transactional email", "SMTP"',
+    useIt: 'Sending password reset emails. Order confirmations and receipts. Marketing newsletters. Automated system notifications via email.',
+    dontIt: 'Receiving and managing inbound email at scale (use WorkMail). Two-way email conversations. Internal company email hosting.',
+  },
+  {
+    id: 'billingconductor', name: 'AWS Billing Conductor', emoji: '🧾',
+    color: '#A1887F',
+    tags: [{ label: 'Cost', cls: 'tag-cost' }],
+    catChip: { label: 'Cost Mgmt', cls: 'cat-cost' },
+    type: 'Custom Billing Engine',
+    definition: 'Create custom billing rates for different teams — charge internal groups different prices than what AWS charges you.',
+    useCase: 'Customize billing rates and chargeback for internal teams',
+    examKeywords: 'custom billing, chargeback, proforma, pricing rules, billing groups, margin, internal pricing',
+    examTrigger: '"Custom billing", "Chargeback", "Internal pricing"',
+    useIt: 'Charging internal teams custom rates. Reselling AWS with markup. Creating proforma billing reports per business unit. Large organizations with complex chargeback needs.',
+    dontIt: 'Tracking spending trends (use Cost Explorer). Setting spend alerts (use Budgets). Simple cost allocation (use tags + Cost Explorer).',
+  },
+  {
+    id: 'budgets', name: 'AWS Budgets', emoji: '💰',
+    color: '#4DB6AC',
+    tags: [{ label: 'Cost', cls: 'tag-cost' }],
+    catChip: { label: 'Cost Mgmt', cls: 'cat-cost' },
+    type: 'Budget Alerts',
+    definition: 'Set a spending limit and get alerted when you\'re about to cross it — like a spending alarm for your AWS bill.',
+    useCase: 'Set spending limits and get alerts before you go over',
+    examKeywords: 'budget, alert, threshold, forecast, actual spend, cost anomaly, SNS topic, budget actions',
+    examTrigger: '"Budget alert", "Spending limit", "Cost threshold"',
+    useIt: '"Alert me if monthly spend hits $500." Auto-stopping resources when budget exceeded. Tracking RI/SP coverage. Cost anomaly detection.',
+    dontIt: 'Deep cost analysis (use Cost Explorer). Detailed hourly usage data (use CUR). Custom pricing for internal teams (use Billing Conductor).',
+  },
+  {
+    id: 'cur', name: 'AWS Cost & Usage Report', emoji: '📋',
+    color: '#FFD54F',
+    tags: [{ label: 'Cost', cls: 'tag-cost' }],
+    catChip: { label: 'Cost Mgmt', cls: 'cat-cost' },
+    type: 'Detailed Cost Data',
+    definition: 'The most detailed billing report AWS offers — every line item, every resource, every hour, delivered to S3.',
+    useCase: 'Get the most detailed billing data — every resource, every hour',
+    examKeywords: 'detailed billing, S3 delivery, hourly granularity, resource-level, line items, Athena integration, Parquet',
+    examTrigger: '"Detailed billing", "Hourly data", "S3 report"',
+    useIt: 'Deep forensic cost analysis. Building custom dashboards on billing data. Querying cost data with Athena. Compliance and audit trails.',
+    dontIt: 'Quick visual spending overview (use Cost Explorer). Simple budget alerts (use Budgets). Real-time cost monitoring (CUR updates daily).',
+  },
+  {
+    id: 'costexplorer', name: 'AWS Cost Explorer', emoji: '📈',
+    color: '#64B5F6',
+    tags: [{ label: 'Cost', cls: 'tag-cost' }],
+    catChip: { label: 'Cost Mgmt', cls: 'cat-cost' },
+    type: 'Cost Visualization',
+    definition: 'A dashboard that shows where your AWS money went — slice by service, region, tag, or time period.',
+    useCase: 'Visualize and analyze your AWS spending trends',
+    examKeywords: 'cost visualization, trends, forecasting, RI recommendations, savings plans, cost by service/tag/region',
+    examTrigger: '"Spending trends", "Cost visualization", "Forecast"',
+    useIt: '"Why did my bill spike this month?" Viewing spend by service/tag/region. RI and Savings Plan purchase recommendations. 12-month cost forecasting.',
+    dontIt: 'Detailed hourly line-item data (use CUR). Setting budget alerts (use Budgets). Custom billing rates (use Billing Conductor).',
+  },
+  {
+    id: 'marketplace', name: 'AWS Marketplace', emoji: '🛒',
+    color: '#90A4AE',
+    tags: [{ label: 'Cost', cls: 'tag-cost' }],
+    catChip: { label: 'Cost Mgmt', cls: 'cat-cost' },
+    type: 'Software Marketplace',
+    definition: 'An app store for AWS — buy third-party software and services that run in your AWS account and show up on your AWS bill.',
+    useCase: 'Buy third-party software that runs on AWS and bills through AWS',
+    examKeywords: 'third-party software, AMI, SaaS, marketplace subscriptions, procurement, consolidated billing, vendor contracts',
+    examTrigger: '"Buy software", "Marketplace subscription", "Third-party AMI"',
+    useIt: 'Buying pre-configured vendor AMIs. Subscribing to SaaS products through AWS. Simplifying procurement (one bill). Finding vetted security/compliance tools.',
+    dontIt: 'Buying SaaS that doesn\'t run on AWS. Free open-source software (use GitHub). Internal tool distribution. Physical hardware purchases.',
+  },
+];
+
+const serviceById = {};
+services.forEach(s => { serviceById[s.id] = s; });
+const serviceNames = services.map(s => s.name);
+
+// Typing animation
+const typedEl = document.getElementById('typedText');
+const phrases = [
+  '11 services. No fluff. One quiz.',
+  'App integration. Business apps. Cost management.',
+  'Know when to use SNS vs SQS vs EventBridge.',
+  'Actually understand your AWS bill.',
+];
+let phraseIdx = 0, charIdx = 0, isDeleting = false, typeSpeed = 60;
+(function typeLoop() {
+  const current = phrases[phraseIdx];
+  typedEl.textContent = isDeleting ? current.substring(0, charIdx - 1) : current.substring(0, charIdx + 1);
+  charIdx += isDeleting ? -1 : 1;
+  typeSpeed = isDeleting ? 25 : 55;
+  if (!isDeleting && charIdx === current.length) { typeSpeed = 2000; isDeleting = true; }
+  else if (isDeleting && charIdx === 0) { isDeleting = false; phraseIdx = (phraseIdx + 1) % phrases.length; typeSpeed = 400; }
+  setTimeout(typeLoop, typeSpeed);
+})();
+
+// Color legend
+const legendRow = document.getElementById('legendRow');
+services.forEach(s => {
+  const chip = document.createElement('span');
+  chip.className = 'legend-chip';
+  chip.innerHTML = `<span class="dot" style="background:${s.color}"></span>${s.name}`;
+  legendRow.appendChild(chip);
+});
+
+// Decision tree — 6 branches
+const treeData = [
+  { icon: '📢', prompt: 'I want to send notifications to many people at once (email, SMS, push)', answer: 'Use <strong style="color:#E57373">Amazon SNS</strong> — pub/sub messaging. One topic, many subscribers. Works with email, SMS, Lambda, SQS, and HTTP endpoints.', color: '#E57373' },
+  { icon: '📥', prompt: 'I want to decouple two services so one doesn\'t overwhelm the other', answer: 'Use <strong style="color:#BA68C8">Amazon SQS</strong> — a message queue. The sender drops messages, a worker picks them up when ready. Acts as a shock absorber for traffic spikes.', color: '#BA68C8' },
+  { icon: '🚌', prompt: 'I want apps to react to events automatically (SaaS → AWS or AWS → AWS)', answer: 'Use <strong style="color:#FF6B9D">Amazon EventBridge</strong> — a serverless event bus. Define rules like "when X happens, trigger Y." Built-in SaaS integrations (Datadog, PagerDuty, etc.).', color: '#FF6B9D' },
+  { icon: '🔗', prompt: 'I need to chain multiple AWS services into a workflow with retries', answer: 'Use <strong style="color:#4FC3F7">AWS Step Functions</strong> — visual state machines. Each step is a service call. Built-in retries, error branching, and execution history.', color: '#4FC3F7' },
+  { icon: '📞', prompt: 'I need a customer support phone system (IVR, call routing, agents)', answer: 'Use <strong style="color:#FFB74D">Amazon Connect</strong> — cloud contact center. Or <strong style="color:#81C784">Amazon SES</strong> if you just need to send emails from your app (receipts, password resets).', color: '#FFB74D' },
+  { icon: '💰', prompt: 'I want to track, visualize, or control my AWS spending', answer: 'Use <strong style="color:#64B5F6">Cost Explorer</strong> to see where money went. <strong style="color:#4DB6AC">Budgets</strong> to set alerts. <strong style="color:#FFD54F">Cost & Usage Report</strong> for detailed data. <strong style="color:#A1887F">Billing Conductor</strong> for custom chargeback.', color: '#4DB6AC' },
+];
+
+const treeBranches = document.getElementById('treeBranches');
+let openTreeAnswer = null;
+treeData.forEach(t => {
+  const wrapper = document.createElement('div');
+  const btn = document.createElement('button');
+  btn.className = 'tree-branch';
+  btn.style.borderLeftColor = t.color;
+  btn.innerHTML = `<span style="font-size:1.2rem;margin-right:8px">${t.icon}</span>${t.prompt}`;
+  btn.addEventListener('click', () => {
+    if (openTreeAnswer && openTreeAnswer !== wrapper) openTreeAnswer.querySelector('.tree-answer').classList.remove('show');
+    const ans = wrapper.querySelector('.tree-answer');
+    ans.classList.toggle('show');
+    openTreeAnswer = ans.classList.contains('show') ? wrapper : null;
+  });
+  const ans = document.createElement('div');
+  ans.className = 'tree-answer';
+  ans.innerHTML = t.answer;
+  wrapper.appendChild(btn); wrapper.appendChild(ans);
+  treeBranches.appendChild(wrapper);
+});
+
+// Service cards
+const cardsGrid = document.getElementById('cardsGrid');
+services.forEach((s, i) => {
+  const card = document.createElement('article');
+  card.className = 'svc-card';
+  card.id = 'svc-' + s.id;
+  card.style.transitionDelay = (i % 3) * 0.08 + 's';
+  card.innerHTML = `
+    <div class="accent-bar" style="background:${s.color}"></div>
+    <div class="card-head"><span class="emoji">${s.emoji}</span><span class="name">${s.name}</span></div>
+    <div class="tags-row">${s.tags.map(t => `<span class="tag ${t.cls}">${t.label}</span>`).join(' ')}</div>
+    <p class="card-def">📖 ${s.definition}</p>
+    <div class="exam-trigger">🎯 Exam trigger words: ${s.examTrigger}</div>
+    <div class="use-block"><strong>✅ Use this when:</strong> ${s.useIt}</div>
+    <div class="dont-block"><strong>❌ Don't confuse with:</strong> ${s.dontIt}</div>
+  `;
+  cardsGrid.appendChild(card);
+});
+
+const cardObserver = new IntersectionObserver((entries) => {
+  entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); cardObserver.unobserve(e.target); }});
+}, { threshold: 0.12, rootMargin: '0px 0px -30px 0px' });
+document.querySelectorAll('.svc-card').forEach(c => cardObserver.observe(c));
+
+// Comparison table
+const compareBody = document.getElementById('compareBody');
+services.forEach(s => {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td><strong style="color:${s.color}">${s.name}</strong></td><td>${s.type}</td><td>${s.useCase}</td><td><span class="cat-chip ${s.catChip.cls}">${s.catChip.label}</span></td>`;
+  compareBody.appendChild(tr);
+});
+
+// Flashcards
+const flashcardData = [
+  { q: 'Which service is the pub/sub messaging one?', hint: 'Send one message to many', a: 'Amazon SNS', color: '#E57373', detail: 'Topics + subscribers. Email, SMS, push, Lambda, SQS.' },
+  { q: 'Which service is the message queue?', hint: 'Decouple, buffer, DLQ', a: 'Amazon SQS', color: '#BA68C8', detail: 'Standard (at-least-once) or FIFO (exactly-once).' },
+  { q: 'Which service is the serverless event bus?', hint: 'Rules, patterns, SaaS', a: 'Amazon EventBridge', color: '#FF6B9D', detail: 'Routes events between AWS services and SaaS apps.' },
+  { q: 'Which service orchestrates workflows with retries?', hint: 'State machine, visual', a: 'AWS Step Functions', color: '#4FC3F7', detail: 'Standard (long-running) or Express (high-volume).' },
+  { q: 'Which service is the cloud contact center?', hint: 'IVR, call routing', a: 'Amazon Connect', color: '#FFB74D', detail: 'Set up a phone support system in minutes. Pay per use.' },
+  { q: 'Which service sends emails from your app?', hint: 'Transactional, bulk email', a: 'Amazon SES', color: '#81C784', detail: 'Receipts, password resets, newsletters. SMTP or API.' },
+  { q: 'Which service sets spending limits and alerts?', hint: 'Budget threshold', a: 'AWS Budgets', color: '#4DB6AC', detail: 'Alert at 80% of monthly budget. Auto-stop resources.' },
+  { q: 'Which service gives the most detailed billing data?', hint: 'Hourly, every resource', a: 'Cost & Usage Report', color: '#FFD54F', detail: 'Delivered to S3. Query with Athena. Every line item.' },
+  { q: 'Which service visualizes your AWS spending?', hint: 'Dashboards, trends', a: 'AWS Cost Explorer', color: '#64B5F6', detail: 'View spend by service/tag/region. 12-month forecasts.' },
+  { q: 'Which service lets you customize billing rates?', hint: 'Chargeback, internal', a: 'AWS Billing Conductor', color: '#A1887F', detail: 'Charge teams custom rates. Proforma billing reports.' },
+  { q: 'Where do you buy third-party software for AWS?', hint: 'App store for AWS', a: 'AWS Marketplace', color: '#90A4AE', detail: 'AMIs, SaaS. Procurement through your AWS bill.' },
+  { q: 'SNS + SQS together = what common pattern?', hint: 'One message → many queues', a: 'Fan-out', color: '#E57373', detail: 'SNS topic → multiple SQS queues. Each gets a copy.' },
+];
+const flashGrid = document.getElementById('flashGrid');
+flashcardData.forEach(f => {
+  const card = document.createElement('div');
+  card.className = 'flash-card';
+  card.innerHTML = `<div class="flash-face flash-front"><p class="prompt">${f.q}</p><p class="hint">💡 ${f.hint}</p></div><div class="flash-face flash-back"><p class="answer" style="color:${f.color}">${f.a}</p><p class="detail">${f.detail}</p></div>`;
+  card.addEventListener('click', () => card.classList.toggle('flipped'));
+  flashGrid.appendChild(card);
+});
+
+// Scenarios
+const scenarioData = [
+  { text: 'You need to send password reset and order confirmation emails from your app.', answer: 'Amazon SES' },
+  { text: 'You have three microservices. When a user signs up, all three need to know — without them calling each other directly.', answer: 'Amazon EventBridge' },
+  { text: 'Your order processing has 5 steps (validate → charge → ship → email → update DB). If step 3 fails, retry 3 times then alert.', answer: 'AWS Step Functions' },
+  { text: 'Your web app generates traffic spikes. You need a buffer between the frontend and backend workers so nothing gets lost.', answer: 'Amazon SQS' },
+  { text: 'When an order is placed, you need to send an email AND an SMS AND update a Slack channel — all at once.', answer: 'Amazon SNS' },
+  { text: 'You need to set up a customer support phone line with IVR ("press 1 for billing, 2 for tech support") and route calls to agents.', answer: 'Amazon Connect' },
+  { text: 'Your finance team wants to see why the AWS bill spiked 40% this month, broken down by service and team.', answer: 'AWS Cost Explorer' },
+  { text: 'You want to get a text alert if your AWS spending crosses $1,000 this month.', answer: 'AWS Budgets' },
+  { text: 'Your company needs to charge each department a different rate for AWS usage (with a 15% overhead markup).', answer: 'AWS Billing Conductor' },
+  { text: 'Your auditors need a complete, hourly breakdown of every single AWS resource charge for the last year.', answer: 'AWS Cost & Usage Report' },
+];
+
+let scenarioScore = 0;
+const scenarioAnswered = new Set();
+const scenarioGrid = document.getElementById('scenarioGrid');
+const scenarioScoreEl = document.getElementById('scenarioScore');
+
+scenarioData.forEach((sc, i) => {
+  const card = document.createElement('div');
+  card.className = 'scenario-card';
+  card.id = 'sc-' + i;
+  const selectId = 'sc-select-' + i;
+  const opts = ['-- Choose a service --', ...serviceNames];
+  card.innerHTML = `<div class="sc-text">${i+1}. ${sc.text}</div><div class="sc-controls"><select id="${selectId}">${opts.map(o => `<option value="${o}">${o}</option>`).join('')}</select><button class="check-btn" id="sc-btn-${i}">Check</button></div><div class="sc-feedback" id="sc-fb-${i}"></div>`;
+  scenarioGrid.appendChild(card);
+  const btn = card.querySelector('.check-btn');
+  const select = card.querySelector('#' + selectId);
+  const fb = card.querySelector('.sc-feedback');
+  btn.addEventListener('click', () => {
+    if (scenarioAnswered.has(i)) return;
+    const correct = select.value === sc.answer;
+    scenarioAnswered.add(i);
+    card.classList.add(correct ? 'correct' : 'wrong');
+    fb.className = 'sc-feedback show ' + (correct ? 'correct-fb' : 'wrong-fb');
+    fb.innerHTML = correct ? `✅ Correct! <strong>${sc.answer}</strong> is the right choice.` : `❌ Not quite. The best choice is <strong>${sc.answer}</strong>.`;
+    if (correct) scenarioScore++;
+    scenarioScoreEl.textContent = `Score: ${scenarioScore} / 10`;
+    btn.disabled = true; btn.style.opacity = '0.5'; select.disabled = true;
+  });
+});
+
+// Quiz — 20 questions
+const quizData = [
+  { service: 'EventBridge', question: 'What is the core concept in Amazon EventBridge?', options: ['A queue that holds messages', 'An event bus that routes events using rules', 'A state machine that orchestrates workflows', 'A topic that fans out to subscribers'], correct: 1, explain: 'EventBridge is built around an event bus. You define rules that match event patterns, and route matching events to targets like Lambda, Step Functions, or SQS.' },
+  { service: 'EventBridge', question: 'You need your app to react to events from a third-party SaaS provider (like Datadog). Which EventBridge feature?', options: ['Custom event bus', 'Partner event bus', 'Default event bus', 'SNS topic integration'], correct: 1, explain: 'Partner event buses are specifically for SaaS integrations. AWS partners (Datadog, PagerDuty, etc.) publish events to their partner bus, and you create rules to route them.' },
+  { service: 'SNS', question: 'What does SNS stand for?', options: ['Simple Network Service', 'Simple Notification Service', 'Serverless Notification System', 'Simple Notification System'], correct: 1, explain: 'Simple Notification Service. It\'s a fully managed pub/sub service that lets you send messages to many subscribers at once.' },
+  { service: 'SNS', question: 'Which is a common exam gotcha about SNS?', options: ['SNS can send to SQS but SQS cannot subscribe to SNS', 'SNS is push-based — it pushes to subscribers, not pull', 'SNS only supports email subscribers', 'SNS requires EC2 to run'], correct: 1, explain: 'SNS is push-based: it pushes messages to subscribers. SQS is pull-based: consumers poll for messages. This push vs pull distinction is a classic exam question.' },
+  { service: 'SQS', question: 'What is a Dead-Letter Queue (DLQ) in SQS used for?', options: ['Storing deleted messages for compliance', 'Holding messages that failed processing after max retries', 'Archiving old messages to S3', 'Queueing messages for dead services'], correct: 1, explain: 'A DLQ catches messages that a consumer failed to process after the maximum number of receive attempts. This prevents bad messages from blocking the queue and lets you debug them separately.' },
+  { service: 'SQS', question: 'You need messages to be processed exactly once and in order. Which SQS queue type?', options: ['Standard queue', 'FIFO queue', 'Priority queue', 'Ordered standard queue'], correct: 1, explain: 'FIFO (First-In-First-Out) queues guarantee exactly-once processing and strict message ordering. Standard queues are at-least-once and best-effort ordering — but have much higher throughput.' },
+  { service: 'SQS', question: 'What is SQS long polling?', options: ['Polling a queue from a distant region', 'Waiting up to 20 seconds for messages instead of returning empty immediately', 'Checking multiple queues in sequence', 'Polling messages older than 14 days'], correct: 1, explain: 'Long polling (WaitTimeSeconds) reduces empty responses and costs. Instead of returning immediately when the queue is empty, SQS waits up to 20 seconds for a message to arrive before responding.' },
+  { service: 'Step Functions', question: 'What are the two types of Step Functions workflows?', options: ['Standard and Express', 'Basic and Advanced', 'Simple and Complex', 'Batch and Streaming'], correct: 0, explain: 'Standard workflows are for long-running, durable workflows (up to 1 year). Express workflows are for high-volume, short-duration processing (up to 5 minutes).' },
+  { service: 'Step Functions', question: 'In Step Functions, what happens when a task fails by default?', options: ['The entire workflow stops immediately', 'The task retries 3 times, then the workflow fails', 'The failed task is skipped', 'A Lambda is triggered automatically'], correct: 1, explain: 'Step Functions retries errors 3 times by default (configurable). If all retries fail, the workflow catches the error — you can route to a fallback state or fail gracefully.' },
+  { service: 'Connect', question: 'What is a "contact flow" in Amazon Connect?', options: ['A customer\'s journey through your website', 'A visual drag-and-drop IVR script that defines the caller experience', 'The routing algorithm for distributing calls', 'A report showing agent performance'], correct: 1, explain: 'A contact flow is a visual script built with drag-and-drop blocks — "play welcome message," "get customer input," "route to queue," etc. It defines the entire caller experience from pickup to resolution.' },
+  { service: 'SES', question: 'What do DKIM and SPF have to do with Amazon SES?', options: ['They encrypt email content end-to-end', 'They verify your domain so emails don\'t get marked as spam', 'They are pricing tiers for SES', 'They compress email attachments'], correct: 1, explain: 'DKIM and SPF are email authentication protocols. You set them up in SES to prove to email providers that you\'re authorized to send from your domain — critical for deliverability (avoiding the spam folder).' },
+  { service: 'SES', question: 'Your app needs to send 50,000 transactional emails per day. Is SES the right choice?', options: ['No — SES is only for marketing newsletters', 'Yes — SES is built for high-volume transactional email', 'No — use SNS email notifications instead', 'Yes — but only if you use SMTP, not the API'], correct: 1, explain: 'SES is purpose-built for high-volume sending — both transactional (receipts, resets) and marketing. SNS email is for simple notifications, not bulk sending. You can use either SMTP or the SES API.' },
+  { service: 'Billing', question: 'What is the difference between AWS Budgets and Cost Explorer?', options: ['They\'re the same — Budgets is the old name', 'Budgets sets spending alerts; Cost Explorer visualizes spending trends', 'Budgets is for enterprise; Cost Explorer is for startups', 'Cost Explorer only shows EC2 costs'], correct: 1, explain: 'Budgets is proactive (alert before you overspend). Cost Explorer is analytical (see where money went and forecast future spend). They complement each other — you set budgets based on Cost Explorer insights.' },
+  { service: 'Billing', question: 'Which AWS service provides the most granular billing data — down to individual resource hours?', options: ['AWS Cost Explorer', 'AWS Budgets', 'AWS Cost & Usage Report (CUR)', 'AWS Billing Dashboard'], correct: 2, explain: 'CUR delivers hourly line-item detail to S3. Cost Explorer shows aggregated trends. CUR is the raw data; Cost Explorer is the dashboard on top. For forensic analysis, you need CUR + Athena.' },
+  { service: 'Billing', question: 'Your company wants to show each department a custom AWS bill with their own pricing (different from what AWS charges). Which service?', options: ['AWS Cost Explorer with tags', 'AWS Budgets per department', 'AWS Billing Conductor', 'AWS Organizations with OU billing'], correct: 2, explain: 'Billing Conductor lets you define custom pricing rules and generate proforma billing reports. It\'s for chargeback scenarios where you want to bill internal teams at rates different from AWS list prices.' },
+  { service: 'Marketplace', question: 'When you buy software through AWS Marketplace, how are you billed?', options: ['You pay the vendor directly with a credit card', 'The charge appears on your AWS bill', 'AWS sends you a separate Marketplace invoice', 'The vendor bills you monthly via email'], correct: 1, explain: 'Marketplace charges appear on your regular AWS bill. This simplifies procurement — one bill, one payment method, and many Marketplace purchases count toward your AWS spend commitments.' },
+  { service: 'EventBridge', question: 'What is the difference between EventBridge and SNS + SQS?', options: ['They\'re identical — different names for the same thing', 'EventBridge routes by event patterns/rules; SNS+SQS is simpler pub/sub + queuing', 'EventBridge is for internal only; SNS+SQS is for external', 'EventBridge replaces both SNS and SQS entirely'], correct: 1, explain: 'EventBridge adds pattern-based routing and SaaS integration on top of event delivery. SNS is simpler ("send to all subscribers"). SQS is about buffering. They\'re complementary — a common pattern is EventBridge → SNS → SQS.' },
+  { service: 'Connect', question: 'How does Amazon Connect pricing work?', options: ['Monthly per-agent licensing fee', 'Pay-per-use: per minute of calls + per agent per hour', 'Flat annual subscription per phone number', 'Free — included with AWS Support'], correct: 1, explain: 'Pay-per-use: you pay per minute of calls and per agent hour. No upfront fees, no long-term contracts. This is a major differentiator from traditional contact center software.' },
+  { service: 'SNS', question: 'SNS + SQS is a common exam pattern. What does it achieve?', options: ['Message encryption across accounts', 'Fan-out: one SNS message delivered to multiple SQS queues', 'Message compression for large payloads', 'Two-way messaging between services'], correct: 1, explain: 'Fan-out via SNS → multiple SQS queues is the canonical pattern. SNS delivers one message to N queues, each processed independently. This decouples producers from multiple consumer types without the producer knowing about them.' },
+  { service: 'Cost', question: 'What tool would you use to stop resources automatically when spending hits a threshold?', options: ['Cost Explorer anomaly detection', 'AWS Budgets with budget actions', 'Billing Conductor pricing rules', 'AWS Cost & Usage Report alerts'], correct: 1, explain: 'AWS Budgets supports budget actions — automatically stop EC2/RDS instances or apply IAM policies when spend crosses a threshold you define. Cost Explorer can show you the spike but doesn\'t take action; Budgets can.' },
+];
+
+let currentQ = 0, quizScore = 0, quizAnswered = false;
+const quizContainer = document.getElementById('quizContainer');
+const quizProgressEl = document.getElementById('quizProgress');
+const scoreCard = document.getElementById('scoreCard');
+
+function buildQuiz() {
+  quizContainer.innerHTML = '';
+  quizData.forEach((q, i) => {
+    const card = document.createElement('div');
+    card.className = 'quiz-card';
+    card.id = 'qcard-' + i;
+    card.style.display = i === 0 ? 'block' : 'none';
+    const letters = ['A','B','C','D'];
+    card.innerHTML = `<div class="quiz-q-num">${q.service} — Question ${i+1} of 20</div><div class="quiz-question">${q.question}</div><div class="quiz-options" id="qopts-${i}">${q.options.map((o,oi) => `<button class="quiz-option" onclick="answerQuestion(${i},${oi})"><span class="opt-badge">${letters[oi]}</span> ${o}</button>`).join('')}</div><div class="quiz-feedback" id="qfb-${i}"></div><button class="quiz-next" id="qnext-${i}" onclick="nextQuestion(${i})">Next ▶</button>`;
+    quizContainer.appendChild(card);
+  });
+}
+
+function answerQuestion(qIdx, chosen) {
+  if (quizAnswered) return;
+  quizAnswered = true;
+  const q = quizData[qIdx];
+  const card = document.getElementById('qcard-' + qIdx);
+  const fb = document.getElementById('qfb-' + qIdx);
+  const nextBtn = document.getElementById('qnext-' + qIdx);
+  const options = document.querySelectorAll('#qopts-' + qIdx + ' .quiz-option');
+  const isCorrect = chosen === q.correct;
+  options.forEach(o => o.classList.add('disabled'));
+  options[q.correct].classList.add('correct-choice');
+  if (!isCorrect) options[chosen].classList.add('wrong-choice');
+  card.classList.add(isCorrect ? 'correct' : 'incorrect');
+  fb.className = 'quiz-feedback show ' + (isCorrect ? 'correct-fb' : 'incorrect-fb');
+  fb.innerHTML = `<strong>${isCorrect ? '✓ Correct!' : '✗ Not quite.'}</strong> ${q.explain}`;
+  nextBtn.classList.add('show');
+  if (isCorrect) quizScore++;
+  updateQuizProgress();
+}
+
+function nextQuestion(qIdx) {
+  document.getElementById('qcard-' + qIdx).style.display = 'none';
+  quizAnswered = false;
+  if (qIdx + 1 < quizData.length) {
+    currentQ = qIdx + 1;
+    const nc = document.getElementById('qcard-' + currentQ);
+    nc.style.display = 'block';
+    nc.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  } else { showScoreCard(); }
+  updateQuizProgress();
+}
+
+function updateQuizProgress() {
+  const shown = Math.min(currentQ + (quizAnswered ? 1 : 0) + 1, 20);
+  quizProgressEl.textContent = `Question ${Math.min(shown, 20)} of 20`;
+}
+
+function showScoreCard() {
+  quizContainer.style.display = 'none'; quizProgressEl.style.display = 'none'; scoreCard.classList.add('show');
+  const numEl = document.getElementById('scoreNumber');
+  numEl.textContent = quizScore + '/20';
+  numEl.style.color = quizScore >= 14 ? 'var(--success)' : quizScore >= 10 ? 'var(--accent)' : 'var(--danger)';
+  let grade, msg;
+  if (quizScore >= 18) { grade = '🏆 Integration Architect'; msg = 'You know app integration and cost management cold. Go crush that Solutions Architect exam.'; }
+  else if (quizScore >= 14) { grade = '🎉 Event-Driven Engineer'; msg = 'Strong understanding. You\'d design solid architectures. Brush up on the 1-2 areas you missed.'; }
+  else if (quizScore >= 10) { grade = '👍 Cloud Apprentice'; msg = 'Solid foundation. You know the big picture — time to dig deeper into the services that gave you trouble.'; }
+  else { grade = '📚 Keep Studying'; msg = 'No worries — SNS vs SQS vs EventBridge is genuinely confusing. Review the cards and try again.'; }
+  document.getElementById('scoreGrade').textContent = grade;
+  document.getElementById('scoreMsg').textContent = msg;
+  if (quizScore >= 18) launchConfetti();
+  scoreCard.scrollIntoView({ behavior: 'smooth' });
+}
+
+function resetQuiz() {
+  quizScore = 0; currentQ = 0; quizAnswered = false;
+  scoreCard.classList.remove('show');
+  quizContainer.style.display = 'block'; quizProgressEl.style.display = 'block';
+  quizProgressEl.textContent = 'Question 1 of 20';
+  document.querySelectorAll('.quiz-card').forEach((card, i) => {
+    card.style.display = i === 0 ? 'block' : 'none';
+    card.classList.remove('correct', 'incorrect');
+    const fb = card.querySelector('.quiz-feedback');
+    if (fb) { fb.className = 'quiz-feedback'; fb.innerHTML = ''; }
+    const nb = card.querySelector('.quiz-next');
+    if (nb) nb.classList.remove('show');
+    card.querySelectorAll('.quiz-option').forEach(o => o.classList.remove('disabled','correct-choice','wrong-choice'));
+  });
+  quizContainer.scrollIntoView({ behavior: 'smooth' });
+  document.getElementById('confettiContainer').innerHTML = '';
+}
+
+function launchConfetti() {
+  const container = document.getElementById('confettiContainer');
+  const colors = ['#00D2A0','#FF6B9D','#E57373','#BA68C8','#4FC3F7','#81C784','#4DB6AC','#FFB74D','#FFD54F','#64B5F6'];
+  const frag = document.createDocumentFragment();
+  for (let i=0;i<200;i++) {
+    const p = document.createElement('div');
+    p.className = 'confetti-piece';
+    p.style.left='50%';p.style.top='45%';
+    p.style.width=(Math.random()*10+6)+'px';p.style.height=(Math.random()*10+6)+'px';
+    p.style.background=colors[Math.floor(Math.random()*colors.length)];
+    p.style.borderRadius=Math.random()>0.5?'50%':'2px';
+    p.style.setProperty('--d',(Math.random()*2+2)+'s');
+    p.style.setProperty('--delay',(Math.random()*1.5)+'s');
+    p.style.setProperty('--dx',(Math.random()*600-300)+'px');
+    p.style.setProperty('--dy',(Math.random()*500+300)+'px');
+    p.style.setProperty('--sp',(Math.random()*1080-540)+'deg');
+    frag.appendChild(p);
+  }
+  container.appendChild(frag);
+  setTimeout(()=>{container.innerHTML='';},4500);
+}
+buildQuiz();
+
+// Cheat sheet
+const cheatData = [
+  { emoji:'🚌', desc:'Serverless event bus — routes events between apps using rules', svc:'EventBridge' },
+  { emoji:'📢', desc:'Pub/sub — send one message to many subscribers at once', svc:'SNS' },
+  { emoji:'📥', desc:'Message queue — decouple services with a buffer', svc:'SQS' },
+  { emoji:'🔗', desc:'State machine workflows with built-in retries', svc:'Step Functions' },
+  { emoji:'📞', desc:'Cloud contact center with IVR and call routing', svc:'Connect' },
+  { emoji:'✉️', desc:'Send transactional emails from your app at scale', svc:'SES' },
+  { emoji:'🧾', desc:'Custom billing rates for internal chargeback', svc:'Billing Conductor' },
+  { emoji:'💰', desc:'Set spending limits and get alerts before you overspend', svc:'Budgets' },
+  { emoji:'📋', desc:'Most detailed billing report — hourly, per resource, to S3', svc:'CUR' },
+  { emoji:'📈', desc:'Visual dashboard for AWS spending trends', svc:'Cost Explorer' },
+  { emoji:'🛒', desc:'Buy third-party software that bills through AWS', svc:'Marketplace' },
+  { emoji:'🔄', desc:'SNS → multiple SQS queues = fan-out pattern', svc:'SNS + SQS' },
+  { emoji:'⏳', desc:'SQS long polling — wait 20s for messages, reduce empty calls', svc:'SQS' },
+  { emoji:'📊', desc:'Cost Explorer shows trends; Budgets sends alerts at thresholds', svc:'CE + Budgets' },
+];
+const cheatsheetGrid = document.getElementById('cheatsheetGrid');
+cheatData.forEach(c => {
+  const item = document.createElement('div');
+  item.className = 'cheat-item';
+  item.innerHTML = `<span class="ch-emoji">${c.emoji}</span><span class="ch-desc">${c.desc}</span><span class="ch-service">${c.svc}</span>`;
+  cheatsheetGrid.appendChild(item);
+});
+
+// Nav tracking
+const navLinks = document.querySelectorAll('#stickyNav a');
+const sectionIds = ['hero','tree','cards','concepts','compare','memory','scenarios','quiz','cheatsheet'];
+const sectionEls = sectionIds.map(id => document.getElementById(id));
+function updateNav() {
+  const scrollY = window.scrollY + 80;
+  let activeId = 'hero';
+  for (let i = sectionEls.length - 1; i >= 0; i--) {
+    if (sectionEls[i] && sectionEls[i].offsetTop <= scrollY) { activeId = sectionIds[i]; break; }
+  }
+  navLinks.forEach(a => a.classList.toggle('active', a.getAttribute('href') === '#' + activeId));
+}
+
+// Progress bar
+const progressFill = document.getElementById('progressFill');
+const progressSections = sectionEls.filter(Boolean);
+const progressSeen = new Set();
+const progressObserver = new IntersectionObserver((entries) => {
+  entries.forEach(e => { if (e.isIntersecting) progressSeen.add(e.target.id); });
+  progressFill.style.width = Math.min(100, Math.round((progressSeen.size / progressSections.length) * 100)) + '%';
+}, { threshold: 0.2 });
+progressSections.forEach(el => progressObserver.observe(el));
+window.addEventListener('scroll', updateNav, { passive: true });
+updateNav();
+</script>
+</body>
+</html>
